@@ -41,4 +41,36 @@ public class TravelController(ITravelService service) : ControllerBase
             return BadRequest(e.Message);
         }
     }
+
+    [HttpPost("clients/{clientId:int}/trips/{tripId:int}")]
+    public async Task<IActionResult> RegisterClientOnTrip([FromRoute] int clientId, [FromRoute] int tripId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.RegisterClientOnTripAsync(clientId, tripId, cancellationToken));
+        }
+        catch (NotFoundException e)
+        {
+            return NotFound(e.Message);
+        }
+        catch (TripFullException e)
+        {
+            return BadRequest(e.Message);
+        }
+    }
+
+    [HttpDelete("clients/{clientId:int}/trips/{tripId:int}")]
+    public async Task<IActionResult> RemoveDeleteClientFromTrip([FromRoute] int clientId, [FromRoute] int tripId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await service.RemoveClientFromTripAsync(clientId, tripId, cancellationToken);
+            return NoContent();
+        }
+        catch (NotFoundException e)
+        {
+            return NotFound(e.Message);
+        }
+    }
+    
 }

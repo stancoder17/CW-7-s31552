@@ -24,7 +24,8 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                                 FROM Trip t
                                 JOIN Country_Trip ct ON t.IdTrip = ct.IdTrip
                                 JOIN Country c ON ct.IdCountry = c.IdCountry";
-        await using (var command = new SqlCommand(query, connection)) {
+        await using (var command = new SqlCommand(query, connection))
+        {
             await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             {
                 while (await reader.ReadAsync(cancellationToken))
@@ -44,6 +45,7 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                         };
                         result.Add(idTrip, trip);
                     }
+
                     var country = reader.GetString(reader.GetOrdinal("CountryName"));
                     if (!trip.Countries.Contains(country))
                     {
@@ -52,6 +54,7 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                 }
             }
         }
+
         return result
             .OrderBy(entry => entry.Key)
             .Select(entry => entry.Value)
@@ -63,7 +66,8 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
     /// </summary>
     /// <returns>All trips for the given client with additional info regarding payment and registration time</returns>
     /// <exception cref="NotFoundException">When the client with the given ID doesn't exist.</exception>
-    public async Task<IEnumerable<TripGetByClientIdDTO>> GetTripsByClientIdAsync(int clientId, CancellationToken cancellationToken)
+    public async Task<IEnumerable<TripGetByClientIdDTO>> GetTripsByClientIdAsync(int clientId,
+        CancellationToken cancellationToken)
     {
         await using (var connection = new SqlConnection(_connectionString))
         {
@@ -80,9 +84,9 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                     }
                 }
             }
-        
+
             var result = new List<TripGetByClientIdDTO>();
-            
+
             const string query2 = @"SELECT 
                                     t.IdTrip, t.Name, t.Description, t.DateFrom, t.DateTo, t.MaxPeople, ct.RegisteredAt, ct.PaymentDate
                                 FROM Trip t
@@ -111,6 +115,7 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                     }
                 }
             }
+
             return result;
         }
     }
@@ -120,8 +125,8 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
         await using (var connection = new SqlConnection(_connectionString))
         {
             const string query = @"INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel)
-                                   VALUES (@FirstName, @LastName, @Email, @Telephone, @Pesel);
-                                   SELECT SCOPE_IDENTITY();";
+                                   VALUES (@FirstName, @LastName, @Email, @Telephone, @Pesel); 
+                                   SELECT SCOPE_IDENTITY();"; // The VALUES part works, ignore the error
             await connection.OpenAsync(cancellationToken);
             await using (var command = new SqlCommand(query, connection))
             {
@@ -134,8 +139,9 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                 return new Client
                 {
                     IdClient = Convert.ToInt32(
-                        await command.ExecuteScalarAsync(cancellationToken) // ExecScalAsync refers to SELECT SCOPE_IDENTITY();
-                        ), 
+                        await command.ExecuteScalarAsync(
+                            cancellationToken) // ExecScalAsync refers to SELECT SCOPE_IDENTITY();
+                    ),
                     FirstName = client.FirstName,
                     LastName = client.LastName,
                     Email = client.Email,
@@ -146,8 +152,140 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
         }
     }
 
-    public Task<RegisterClientOnTripDTO> RegisterClientOnTripAsync(int clientId, int tripId, CancellationToken cancellationToken)
+    public async Task<RegisterClientOnTripDTO> RegisterClientOnTripAsync(int clientId, int tripId,
+        CancellationToken cancellationToken)
     {
-        
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            // Check if client exists
+            const string getClientQuery = @"SELECT 1 FROM Client WHERE IdClient = @ClientId";
+            await connection.OpenAsync(cancellationToken);
+            await using (var command = new SqlCommand(getClientQuery, connection))
+            {
+                command.Parameters.AddWithValue("@ClientId", clientId);
+                await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+                {
+                    if (!reader.HasRows)
+                    {
+                        throw new NotFoundException($"Client with id {clientId} does not exist.");
+                    }
+                }
+            }
+
+            // Check if trip exists
+            const string getTripQuery = @"SELECT 1 FROM Trip WHERE IdTrip = @TripId";
+            await using (var command = new SqlCommand(getTripQuery, connection))
+            {
+                command.Parameters.AddWithValue("@TripId", tripId);
+                await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+                {
+                    if (!reader.HasRows)
+                    {
+                        throw new NotFoundException($"Trip with id {tripId} does not exist.");
+                    }
+                }
+            }
+
+            // Check if the trip is full
+            const string getMaxPeopleQuery = @"SELECT MaxPeople FROM Trip WHERE IdTrip = @IdTrip";
+            const string getPeopleCountQuery = @"SELECT Count(*) FROM Client_Trip WHERE IdTrip = @IdTrip";
+            int maxPeople;
+            int peopleCount;
+
+            await using (var command = new SqlCommand(getMaxPeopleQuery, connection))
+            {
+                command.Parameters.AddWithValue("@IdTrip", tripId);
+                maxPeople = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+            }
+
+            await using (var command2 = new SqlCommand(getPeopleCountQuery, connection))
+            {
+                command2.Parameters.AddWithValue("@IdTrip", tripId);
+                peopleCount = Convert.ToInt32(await command2.ExecuteScalarAsync(cancellationToken));
+
+                if (peopleCount == maxPeople)
+                {
+                    throw new TripFullException("Too many people on this trip.");
+                }
+            }
+
+            // Everything is correct - INSERT
+            const string insertQuery =
+                @"INSERT INTO Client_Trip (IdClient, IdTrip, RegisteredAt, PaymentDate) VALUES (@IdClient, @IdTrip, @RegisteredAt, @PaymentDate);";
+            const string getClientData =
+                @"SELECT FirstName, LastName, Email, Telephone, Pesel FROM Client WHERE IdClient = @IdClient";
+            const string getTripData = @"SELECT Name, Description, DateFrom, DateTo FROM Trip WHERE IdTrip = @IdTrip";
+
+            string firstName, lastName, email, telephone, pesel;
+            string tripName, tripDescription;
+            DateTime dateFrom, dateTo;
+
+            await using (var clientDataCommand = new SqlCommand(getClientData, connection))
+            {
+                clientDataCommand.Parameters.AddWithValue("@IdClient", clientId);
+                await using var clientDataReader = await clientDataCommand.ExecuteReaderAsync(cancellationToken);
+                await clientDataReader.ReadAsync(cancellationToken);
+                firstName = clientDataReader.GetString(clientDataReader.GetOrdinal("FirstName"));
+                lastName = clientDataReader.GetString(clientDataReader.GetOrdinal("LastName"));
+                email = clientDataReader.GetString(clientDataReader.GetOrdinal("Email"));
+                telephone = clientDataReader.GetString(clientDataReader.GetOrdinal("Telephone"));
+                pesel = clientDataReader.GetString(clientDataReader.GetOrdinal("Pesel"));
+            }
+
+            await using (var tripDataCommand = new SqlCommand(getTripData, connection))
+            {
+                tripDataCommand.Parameters.AddWithValue("@IdTrip", tripId);
+                await using var tripDataReader = await tripDataCommand.ExecuteReaderAsync(cancellationToken);
+                await tripDataReader.ReadAsync(cancellationToken);
+                tripName = tripDataReader.GetString(tripDataReader.GetOrdinal("Name"));
+                tripDescription = tripDataReader.GetString(tripDataReader.GetOrdinal("Description"));
+                dateFrom = tripDataReader.GetDateTime(tripDataReader.GetOrdinal("DateFrom"));
+                dateTo = tripDataReader.GetDateTime(tripDataReader.GetOrdinal("DateTo"));
+            }
+
+            await using (var insertCommand = new SqlCommand(insertQuery, connection))
+            {
+                insertCommand.Parameters.AddWithValue("@IdClient", clientId);
+                insertCommand.Parameters.AddWithValue("@IdTrip", tripId);
+                insertCommand.Parameters.AddWithValue("@RegisteredAt", DateTime.Now);
+                insertCommand.Parameters.AddWithValue("@PaymentDate", DateTime.Now);
+                await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            return new RegisterClientOnTripDTO
+            {
+                IdClient = clientId,
+                IdTrip = tripId,
+                FirstName = firstName,
+                LastName = lastName,
+                Email = email,
+                Telephone = telephone,
+                Pesel = pesel,
+                TripName = tripName,
+                TripDescription = tripDescription,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+            };
+        }
+    }
+
+    public async Task RemoveClientFromTripAsync(int clientId, int tripId, CancellationToken cancellationToken)
+    {
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            const string deleteQuery = @"DELETE FROM Client_Trip WHERE idClient = @IdClient AND IdTrip = @IdTrip";
+            await connection.OpenAsync(cancellationToken);
+            await using (var command = new SqlCommand(deleteQuery, connection))
+            {
+                command.Parameters.AddWithValue("@IdClient", clientId);
+                command.Parameters.AddWithValue("@IdTrip", tripId);
+                var numOfRows = await command.ExecuteNonQueryAsync(cancellationToken);
+
+                if (numOfRows == 0)
+                {
+                    throw new NotFoundException($"Trip not found.");
+                }
+            }
+        }
     }
 }

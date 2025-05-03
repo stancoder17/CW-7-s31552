@@ -50,4 +50,15 @@ public class TravelService(ITravelRepository repository) : ITravelService
         
         return result;
     }
+
+    public async Task<RegisterClientOnTripDTO> RegisterClientOnTripAsync(int clientId, int tripId, CancellationToken cancellationToken)
+    {
+        var result = await repository.RegisterClientOnTripAsync(clientId, tripId, cancellationToken);
+        return result;
+    }
+
+    public async Task RemoveClientFromTripAsync(int clientId, int tripId, CancellationToken cancellationToken)
+    {
+        await repository.RemoveClientFromTripAsync(clientId, tripId, cancellationToken);
+    }
 }
