@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Travel_agencies_application</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.3"/>
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.0-preview1.25120.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include=".git\objects\info\" />
+      <Folder Include=".git\refs\tags\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include=".git\config" />
+      <Content Include=".git\description" />
+      <Content Include=".git\FETCH_HEAD" />
+      <Content Include=".git\HEAD" />
+      <Content Include=".git\hooks\applypatch-msg.sample" />
+      <Content Include=".git\hooks\commit-msg.sample" />
+      <Content Include=".git\hooks\fsmonitor-watchman.sample" />
+      <Content Include=".git\hooks\post-update.sample" />
+      <Content Include=".git\hooks\pre-applypatch.sample" />
+      <Content Include=".git\hooks\pre-commit.sample" />
+      <Content Include=".git\hooks\pre-merge-commit.sample" />
+      <Content Include=".git\hooks\pre-push.sample" />
+      <Content Include=".git\hooks\pre-rebase.sample" />
+      <Content Include=".git\hooks\pre-receive.sample" />
+      <Content Include=".git\hooks\prepare-commit-msg.sample" />
+      <Content Include=".git\hooks\push-to-checkout.sample" />
+      <Content Include=".git\hooks\sendemail-validate.sample" />
+      <Content Include=".git\hooks\update.sample" />
+      <Content Include=".git\index" />
+      <Content Include=".git\info\exclude" />
+      <Content Include=".git\logs\HEAD" />
+      <Content Include=".git\logs\refs\heads\master" />
+      <Content Include=".git\logs\refs\remotes\origin\main" />
+      <Content Include=".git\objects\pack\pack-bd8564bb3991066acabae1bab8f10d8413961964.idx" />
+      <Content Include=".git\objects\pack\pack-bd8564bb3991066acabae1bab8f10d8413961964.pack" />
+      <Content Include=".git\objects\pack\pack-bd8564bb3991066acabae1bab8f10d8413961964.rev" />
+      <Content Include=".git\packed-refs" />
+      <Content Include=".git\refs\heads\master" />
+      <Content Include=".git\refs\remotes\origin\main" />
+    </ItemGroup>
+
+</Project>
