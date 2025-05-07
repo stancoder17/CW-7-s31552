@@ -2,7 +2,7 @@
 
 namespace Travel_agencies_application.Repositories;
 
-public interface ITravelRepository
+public interface IDbService
 {
     public Task<IEnumerable<TripGetDto>> GetTripsAsync(CancellationToken cancellationToken);
     public Task<IEnumerable<TripGetByClientIdDTO>> GetTripsByClientIdAsync(int clientId, CancellationToken cancellationToken);

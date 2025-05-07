@@ -1,5 +1,4 @@
 using Travel_agencies_application.Repositories;
-using Travel_agencies_application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,8 +9,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 // Dependency injection
-builder.Services.AddTransient<ITravelRepository, TravelRepository>();
-builder.Services.AddTransient<ITravelService, TravelService>();
+builder.Services.AddTransient<IDbService, DbService>();
 
 var app = builder.Build();
 

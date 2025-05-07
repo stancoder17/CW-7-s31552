@@ -4,13 +4,13 @@ using Travel_agencies_application.Models;
 
 namespace Travel_agencies_application.Repositories;
 
-public class TravelRepository(IConfiguration config) : ITravelRepository
+public class DbService(IConfiguration config) : IDbService
 {
     private readonly string? _connectionString = config.GetConnectionString("Default");
 
     /// <summary>
-    /// Here I'm using dictionary to check if a trip already exists, and if it does I add another country to that trip.
-    /// I do it, because instead of getting a list of countries for each trip, I get the same trip many times, but each with different country it's associated with. 
+    /// Here a dictionary is used to check if a trip already exists, and if it does, another country is added to that trip.
+    /// Instead of getting a list of countries for each trip, the same trip many times is gotten, but each with a different country it's associated with. 
     /// </summary>
     /// <returns>List of all trips plus country names.</returns>
     public async Task<IEnumerable<TripGetDto>> GetTripsAsync(CancellationToken cancellationToken)
@@ -62,18 +62,17 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
     }
 
     /// <summary>
-    /// First query is to check if the client exists
+    /// The first query is to check if the client exists
     /// </summary>
     /// <returns>All trips for the given client with additional info regarding payment and registration time</returns>
     /// <exception cref="NotFoundException">When the client with the given ID doesn't exist.</exception>
-    public async Task<IEnumerable<TripGetByClientIdDTO>> GetTripsByClientIdAsync(int clientId,
-        CancellationToken cancellationToken)
+    public async Task<IEnumerable<TripGetByClientIdDTO>> GetTripsByClientIdAsync(int clientId, CancellationToken cancellationToken)
     {
         await using (var connection = new SqlConnection(_connectionString))
         {
-            const string query = @"SELECT 1 FROM Client WHERE IdClient = @ClientId";
+            const string clientExistsQuery = @"SELECT 1 FROM Client WHERE IdClient = @ClientId";
             await connection.OpenAsync(cancellationToken);
-            await using (var command = new SqlCommand(query, connection))
+            await using (var command = new SqlCommand(clientExistsQuery, connection))
             {
                 command.Parameters.AddWithValue("@ClientId", clientId);
                 await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -87,12 +86,12 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
 
             var result = new List<TripGetByClientIdDTO>();
 
-            const string query2 = @"SELECT 
+            const string getQuery = @"SELECT 
                                     t.IdTrip, t.Name, t.Description, t.DateFrom, t.DateTo, t.MaxPeople, ct.RegisteredAt, ct.PaymentDate
                                 FROM Trip t
                                 JOIN Client_Trip ct ON t.IdTrip = ct.IdTrip 
                                 WHERE ct.IdClient = @ClientId";
-            await using (var command = new SqlCommand(query2, connection))
+            await using (var command = new SqlCommand(getQuery, connection))
             {
                 command.Parameters.AddWithValue("@ClientId", clientId);
 
@@ -115,20 +114,54 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                     }
                 }
             }
-
+            // If the list is empty, throw an exception.
+            if (!result.Any())
+                throw new NotFoundException("No trips found for the given client.");
+            
             return result;
         }
     }
 
+    /// <summary>
+    /// Data format is validated before INSERT.
+    /// </summary>
+    /// <param name="client"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>A new Client</returns>
+    /// <exception cref="InvalidFormatException">When the data format is invalid.</exception>
     public async Task<Client> CreateClientAsync(ClientCreateDto client, CancellationToken cancellationToken)
     {
+        // Validate data format first
+        if (!client.Email.Contains('@') || !client.Email.Contains('.'))
+        {
+            throw new InvalidFormatException("Invalid email format.");
+        }
+
+        if (client.Pesel.Any(c => !char.IsDigit(c)))
+        {
+            throw new InvalidFormatException("Pesel must only contain digits.");
+        }
+
+        if (client.Telephone.StartsWith('+'))
+        {
+            if (client.Telephone[1..].Any(c => !char.IsDigit(c)))
+            {
+                throw new InvalidFormatException("Phone number must contain only digits and '+' at the beginning.");
+            }
+        }
+        else
+        {
+            throw new InvalidFormatException("Phone number must start with '+'.");
+        }
+        
+        // INSERT
         await using (var connection = new SqlConnection(_connectionString))
         {
-            const string query = @"INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel)
+            const string createClientQuery = @"INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel)
                                    VALUES (@FirstName, @LastName, @Email, @Telephone, @Pesel); 
                                    SELECT SCOPE_IDENTITY();"; // The VALUES part works, ignore the error
             await connection.OpenAsync(cancellationToken);
-            await using (var command = new SqlCommand(query, connection))
+            await using (var command = new SqlCommand(createClientQuery, connection))
             {
                 command.Parameters.AddWithValue("@FirstName", client.FirstName);
                 command.Parameters.AddWithValue("@LastName", client.LastName);
@@ -139,8 +172,7 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                 return new Client
                 {
                     IdClient = Convert.ToInt32(
-                        await command.ExecuteScalarAsync(
-                            cancellationToken) // ExecScalAsync refers to SELECT SCOPE_IDENTITY();
+                        await command.ExecuteScalarAsync(cancellationToken) // ExecuteScalarAsync refers to SELECT SCOPE_IDENTITY();
                     ),
                     FirstName = client.FirstName,
                     LastName = client.LastName,
@@ -148,16 +180,27 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                     Telephone = client.Telephone,
                     Pesel = client.Pesel,
                 };
+                
             }
         }
     }
 
+    /// <summary>
+    /// First the method check if the client and the trip exist and if the existing trip is full.
+    /// The INSERT is done when everything is correct.
+    /// </summary>
+    /// <param name="clientId"></param>
+    /// <param name="tripId"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>A DTO containing Client-Trip data</returns>
+    /// <exception cref="NotFoundException">When the client or the trip don't exist</exception>
+    /// <exception cref="TripFullException">When the trip is full</exception>
     public async Task<RegisterClientOnTripDTO> RegisterClientOnTripAsync(int clientId, int tripId,
         CancellationToken cancellationToken)
     {
         await using (var connection = new SqlConnection(_connectionString))
         {
-            // Check if client exists
+            // Check if the client exists
             const string getClientQuery = @"SELECT 1 FROM Client WHERE IdClient = @ClientId";
             await connection.OpenAsync(cancellationToken);
             await using (var command = new SqlCommand(getClientQuery, connection))
@@ -172,7 +215,7 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
                 }
             }
 
-            // Check if trip exists
+            // Check if the trip exists
             const string getTripQuery = @"SELECT 1 FROM Trip WHERE IdTrip = @TripId";
             await using (var command = new SqlCommand(getTripQuery, connection))
             {
@@ -205,16 +248,33 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
 
                 if (peopleCount == maxPeople)
                 {
-                    throw new TripFullException("Too many people on this trip.");
+                    throw new TripFullException("This trip is full.");
+                }
+            }
+            
+            // Check if the client is already registered on the trip
+            const string checkClientOnTripQuery = @"SELECT 1 FROM Client_Trip WHERE IdClient = @IdClient AND IdTrip = @IdTrip";
+            await using (var command = new SqlCommand(checkClientOnTripQuery, connection))
+            {
+                command.Parameters.AddWithValue("@IdClient", clientId);
+                command.Parameters.AddWithValue("@IdTrip", tripId);
+
+                await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+                {
+                    if (reader.HasRows)
+                    {
+                        throw new RecordExistsException("Client is already registered on the trip.");
+                    }
                 }
             }
 
-            // Everything is correct - INSERT
+            // INSERT
             const string insertQuery =
                 @"INSERT INTO Client_Trip (IdClient, IdTrip, RegisteredAt, PaymentDate) VALUES (@IdClient, @IdTrip, @RegisteredAt, @PaymentDate);";
             const string getClientData =
-                @"SELECT FirstName, LastName, Email, Telephone, Pesel FROM Client WHERE IdClient = @IdClient";
-            const string getTripData = @"SELECT Name, Description, DateFrom, DateTo FROM Trip WHERE IdTrip = @IdTrip";
+                @"SELECT FirstName, LastName, Email, Telephone, Pesel FROM Client WHERE IdClient = @IdClient"; // For DTO data
+            const string getTripData =
+                @"SELECT Name, Description, DateFrom, DateTo FROM Trip WHERE IdTrip = @IdTrip"; // For DTO data
 
             string firstName, lastName, email, telephone, pesel;
             string tripName, tripDescription;
@@ -247,8 +307,8 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
             {
                 insertCommand.Parameters.AddWithValue("@IdClient", clientId);
                 insertCommand.Parameters.AddWithValue("@IdTrip", tripId);
-                insertCommand.Parameters.AddWithValue("@RegisteredAt", DateTime.Now);
-                insertCommand.Parameters.AddWithValue("@PaymentDate", DateTime.Now);
+                insertCommand.Parameters.AddWithValue("@RegisteredAt", int.Parse(DateTime.Now.ToString("yyyyMMdd")));
+                insertCommand.Parameters.AddWithValue("@PaymentDate", int.Parse(DateTime.Now.ToString("yyyyMMdd")));
                 await insertCommand.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -269,6 +329,13 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
         }
     }
 
+    /// <summary>
+    /// Removes client from the trip
+    /// </summary>
+    /// <param name="clientId"></param>
+    /// <param name="tripId"></param>
+    /// <param name="cancellationToken"></param>
+    /// <exception cref="NotFoundException">When the trip doesn't exist</exception>
     public async Task RemoveClientFromTripAsync(int clientId, int tripId, CancellationToken cancellationToken)
     {
         await using (var connection = new SqlConnection(_connectionString))
@@ -279,11 +346,11 @@ public class TravelRepository(IConfiguration config) : ITravelRepository
             {
                 command.Parameters.AddWithValue("@IdClient", clientId);
                 command.Parameters.AddWithValue("@IdTrip", tripId);
-                var numOfRows = await command.ExecuteNonQueryAsync(cancellationToken);
+                var numOfRows = await command.ExecuteNonQueryAsync(cancellationToken); // To check if the client is registered on the trip.
 
                 if (numOfRows == 0)
                 {
-                    throw new NotFoundException($"Trip not found.");
+                    throw new NotFoundException($"The client with id {clientId} is not registered on the trip with id {tripId}.");
                 }
             }
         }

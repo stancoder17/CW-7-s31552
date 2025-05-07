@@ -1,13 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Travel_agencies_application.Exceptions;
 using Travel_agencies_application.Models;
-using Travel_agencies_application.Services;
+using Travel_agencies_application.Repositories;
 
 namespace Travel_agencies_application.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class TravelController(ITravelService service) : ControllerBase
+public class TravelController(IDbService service) : ControllerBase
 {
     [HttpGet("trips")]
     public async Task<IActionResult> GetTrips(CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public class TravelController(ITravelService service) : ControllerBase
         }
     }
 
-    [HttpPost("clients/{clientId:int}/trips/{tripId:int}")]
+    [HttpPut("clients/{clientId:int}/trips/{tripId:int}")]
     public async Task<IActionResult> RegisterClientOnTrip([FromRoute] int clientId, [FromRoute] int tripId, CancellationToken cancellationToken)
     {
         try
@@ -57,10 +57,14 @@ public class TravelController(ITravelService service) : ControllerBase
         {
             return BadRequest(e.Message);
         }
+        catch (RecordExistsException e)
+        {
+            return BadRequest(e.Message);
+        }
     }
 
     [HttpDelete("clients/{clientId:int}/trips/{tripId:int}")]
-    public async Task<IActionResult> RemoveDeleteClientFromTrip([FromRoute] int clientId, [FromRoute] int tripId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RemoveClientFromTrip([FromRoute] int clientId, [FromRoute] int tripId, CancellationToken cancellationToken)
     {
         try
         {
