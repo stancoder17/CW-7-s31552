@@ -1,5 +1,3 @@
-# CW-7-s31552
-
 # Travel Agency API – ADO.NET with SqlConnection and SqlCommand
 
 This project was created as part of my studies in computer science at **Polish-Japanese Academy of Information Technology.**  
@@ -41,16 +39,6 @@ Returns appropriate status codes and messages.
 
 ---
 
-## Implementation
+All queries are parameterized to prevent SQL injection.  
 
-- Uses ADO.NET with `SqlConnection` and `SqlCommand` for database operations.  
-- All queries are parameterized to prevent SQL injection.  
-- Basic input validation is applied.  
-- Proper error handling with correct HTTP status codes.  
-- Follows REST API principles.
-
----
-
-## Notes
-
-This is a student project created for learning purposes only.
+# CW-7-s31552
